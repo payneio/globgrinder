@@ -12,7 +12,7 @@ The `processing` and `processed` directories will be created as needed.
 ```go
 
 directory := "."
-pattern := "\.txt"
+pattern := "\\.txt"
 
 dp, err := dirprocessor.New(directory, pattern)
 if err != nil {
@@ -22,7 +22,7 @@ if err != nil {
 process := make(chan string)
 done := make(chan bool)
 
-go dp.Run(process, make)
+go dp.Run(process, done)
 
 for path := range process {
 
