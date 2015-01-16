@@ -7,9 +7,9 @@ Once a file is found, it will be atomically moved to a `processing` directory an
 You can then pull the file path off the channel, do what you need with it, then signal you are done using another 
 passed in channel. The dirprocessor will then move the file to a `processed` directory.
 
-The processing and processed directories will be created as needed.
+The `processing` and `processed` directories will be created as needed.
 
-```golang
+```go
 
 directory := "."
 pattern := "\.txt"
