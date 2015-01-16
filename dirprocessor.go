@@ -2,10 +2,11 @@ package dirprocessor
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
+	"regexp"
 	"time"
 )
 
@@ -13,10 +14,18 @@ type DirProcessor struct {
 	WatchingDir   string
 	ProcessingDir string
 	ProcessedDir  string
+	Pattern       *regexp.Regexp
 }
 
-func New(watchDir string) (*DirProcessor, error) {
+func New(watchDir string, pattern string) (*DirProcessor, error) {
+
 	dp := new(DirProcessor)
+	if re, err := regexp.Compile(pattern); err != nil {
+		return dp, fmt.Errorf("The file pattern you give must be a valid regular expression. %v", err)
+	} else {
+		dp.Pattern = re
+	}
+
 	if exists, err := exists(watchDir); exists == false || err != nil {
 		return dp, errors.New("The directory you specified to watch does not exist (or is not readable).")
 	}
@@ -34,7 +43,7 @@ func New(watchDir string) (*DirProcessor, error) {
 func (dp *DirProcessor) Run(process chan<- string, done <-chan bool) error {
 
 	fileQueue := make(chan string)
-	go fileWatcher(dp.WatchingDir, fileQueue)
+	go dp.fileWatcher(fileQueue)
 
 	// Process files as they come in
 	for path := range fileQueue {
@@ -68,24 +77,21 @@ func (dp *DirProcessor) Run(process chan<- string, done <-chan bool) error {
 	return nil
 }
 
-func fileWatcher(directory string, fileQueue chan string) {
+func (dp *DirProcessor) fileWatcher(fileQueue chan string) {
 
 	matchFiles := func(path string, info os.FileInfo, err error) error {
 		if info.IsDir() && (info.Name() == "processing" || info.Name() == "processed") {
 			return filepath.SkipDir
 		}
 		// filepattern = sfduPLU_STAGE####_YYYYMMDDHHMMSS.dat
-		if filepath.Ext(path) != ".dat" {
-			return nil
-		}
-		if strings.HasPrefix(info.Name(), "sfduPLU_STAGE") {
+		if match := dp.Pattern.FindString(info.Name()); match != "" {
 			fileQueue <- path
 		}
 		return nil
 	}
 
 	for {
-		err := filepath.Walk(directory, matchFiles)
+		err := filepath.Walk(dp.WatchingDir, matchFiles)
 		if err != nil {
 			log.Fatalf("Could not walk the directory you specified: %v\n", err)
 		}
