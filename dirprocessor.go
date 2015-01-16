@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"regexp"
 	"time"
 )
 
@@ -14,17 +13,16 @@ type DirProcessor struct {
 	WatchingDir   string
 	ProcessingDir string
 	ProcessedDir  string
-	Pattern       *regexp.Regexp
+	Pattern       string
 }
 
 func New(watchDir string, pattern string) (*DirProcessor, error) {
 
 	dp := new(DirProcessor)
-	if re, err := regexp.Compile(pattern); err != nil {
-		return dp, fmt.Errorf("The file pattern you give must be a valid regular expression. %v", err)
-	} else {
-		dp.Pattern = re
+	if _, err := filepath.Glob(pattern); err != nil {
+		return dp, fmt.Errorf("The file pattern you give must be a valid glob. %v", err)
 	}
+	dp.Pattern = pattern
 
 	if exists, err := exists(watchDir); exists == false || err != nil {
 		return dp, errors.New("The directory you specified to watch does not exist (or is not readable).")
@@ -79,21 +77,10 @@ func (dp *DirProcessor) Run(process chan<- string, done <-chan bool) error {
 
 func (dp *DirProcessor) fileWatcher(fileQueue chan string) {
 
-	matchFiles := func(path string, info os.FileInfo, err error) error {
-		if info.IsDir() && (info.Name() == "processing" || info.Name() == "processed") {
-			return filepath.SkipDir
-		}
-		// filepattern = sfduPLU_STAGE####_YYYYMMDDHHMMSS.dat
-		if match := dp.Pattern.FindString(info.Name()); match != "" {
-			fileQueue <- path
-		}
-		return nil
-	}
-
 	for {
-		err := filepath.Walk(dp.WatchingDir, matchFiles)
-		if err != nil {
-			log.Fatalf("Could not walk the directory you specified: %v\n", err)
+		matches, _ := filepath.Glob(filepath.Join(dp.WatchingDir, dp.Pattern))
+		for _, match := range matches {
+			fileQueue <- match
 		}
 		time.Sleep(10 * time.Second)
 	}
