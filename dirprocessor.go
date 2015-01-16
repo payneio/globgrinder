@@ -10,10 +10,10 @@ import (
 )
 
 type DirProcessor struct {
-	WatchingDir   string
-	ProcessingDir string
-	ProcessedDir  string
-	Pattern       string
+	workingDir    string
+	processingDir string
+	processedDir  string
+	pattern       string
 }
 
 func New(watchDir string, pattern string) (*DirProcessor, error) {
@@ -22,14 +22,14 @@ func New(watchDir string, pattern string) (*DirProcessor, error) {
 	if _, err := filepath.Glob(pattern); err != nil {
 		return dp, fmt.Errorf("The file pattern you give must be a valid glob. %v", err)
 	}
-	dp.Pattern = pattern
+	dp.pattern = pattern
 
 	if exists, err := exists(watchDir); exists == false || err != nil {
 		return dp, errors.New("The directory you specified to watch does not exist (or is not readable).")
 	}
-	dp.WatchingDir = watchDir
-	dp.ProcessingDir = filepath.Join(dp.WatchingDir, "processing")
-	dp.ProcessedDir = filepath.Join(dp.WatchingDir, "processed")
+	dp.workingDir = watchDir
+	dp.processingDir = filepath.Join(dp.workingDir, "processing")
+	dp.processedDir = filepath.Join(dp.workingDir, "processed")
 
 	// Check if watch dir exists. Check if subfolder processing and processed exist.
 	// TODO: check for errors here
@@ -49,7 +49,7 @@ func (dp *DirProcessor) Run(process chan<- string, done <-chan bool) error {
 		fileBasePath := filepath.Base(path)
 
 		// get lock on file by copying file (if it has already been moved, continue gracefully)
-		processingPath := filepath.Join(dp.ProcessingDir, fileBasePath)
+		processingPath := filepath.Join(dp.processingDir, fileBasePath)
 		if err := os.Rename(path, processingPath); err != nil {
 			log.Printf("Somebody else got the file first. %v\n", err)
 			continue
@@ -61,7 +61,7 @@ func (dp *DirProcessor) Run(process chan<- string, done <-chan bool) error {
 		<-done // wait for processing.
 
 		// Move file from processing to processed
-		processedPath := filepath.Join(dp.ProcessedDir, fileBasePath)
+		processedPath := filepath.Join(dp.processedDir, fileBasePath)
 		if exists, _ := exists(processedPath); exists == true {
 			if err := os.Remove(processedPath); err != nil {
 				log.Fatalf("Couldn't move a processed file out of the way. %v\n", err)
