@@ -1,20 +1,20 @@
 dirprocessor
 ============
 
-This library will watch (poll every 10 seconds) a directory for the presence of a file matching a given regex pattern.
+This library will watch (poll every 10 seconds) for the presence of a file matching a given glob pattern.
 
-Once a file is found, it will be atomically moved to a `processing` directory and notify you using a passed in channel.
+Once a file is found, it will be atomically moved to a `processing` directory in a working directory you specify and notify you using a passed in channel.
 You can then pull the file path off the channel, do what you need with it, then signal you are done using another 
-passed in channel. The dirprocessor will then move the file to a `processed` directory.
+passed in channel. The dirprocessor will then move the file to a `processed` directory within your working directory.
 
-The `processing` and `processed` directories will be created as needed.
+The `processing` and `processed` directories will be created as needed in your working directory.
 
 ```go
 
-directory := "."
-pattern := "\\.txt"
+workingDirectory := "."
+pattern := "../some_dir/*.txt"
 
-dp, err := dirprocessor.New(directory, pattern)
+dp, err := dirprocessor.New(workingDirectory, pattern)
 if err != nil {
   log.Panic(err)
 }

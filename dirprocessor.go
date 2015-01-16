@@ -20,21 +20,24 @@ func New(watchDir string, pattern string) (*DirProcessor, error) {
 
 	dp := new(DirProcessor)
 	if _, err := filepath.Glob(pattern); err != nil {
-		return dp, fmt.Errorf("The file pattern you give must be a valid glob. %v", err)
+		return nil, fmt.Errorf("The file pattern you give must be a valid glob. %v", err)
 	}
 	dp.pattern = pattern
 
 	if exists, err := exists(watchDir); exists == false || err != nil {
-		return dp, errors.New("The directory you specified to watch does not exist (or is not readable).")
+		return nil, errors.New("The directory you specified to watch does not exist (or is not readable).")
 	}
 	dp.workingDir = watchDir
 	dp.processingDir = filepath.Join(dp.workingDir, "processing")
 	dp.processedDir = filepath.Join(dp.workingDir, "processed")
 
 	// Check if watch dir exists. Check if subfolder processing and processed exist.
-	// TODO: check for errors here
-	os.MkdirAll(dp.ProcessingDir, 0733)
-	os.MkdirAll(dp.ProcessedDir, 0733)
+	if err := os.MkdirAll(dp.processingDir, 0733); err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(dp.processedDir, 0733); err != nil {
+		return nil, err
+	}
 	return dp, nil
 }
 
@@ -61,6 +64,9 @@ func (dp *DirProcessor) Run(process chan<- string, done <-chan bool) error {
 		<-done // wait for processing.
 
 		// Move file from processing to processed
+		// We panic if we're not able to move the file because we want to not
+		// keep processing files if the setup is messed up. E.g. the permissions
+		// are wrong or have changed.
 		processedPath := filepath.Join(dp.processedDir, fileBasePath)
 		if exists, _ := exists(processedPath); exists == true {
 			if err := os.Remove(processedPath); err != nil {
@@ -78,7 +84,7 @@ func (dp *DirProcessor) Run(process chan<- string, done <-chan bool) error {
 func (dp *DirProcessor) fileWatcher(fileQueue chan string) {
 
 	for {
-		matches, _ := filepath.Glob(filepath.Join(dp.WatchingDir, dp.Pattern))
+		matches, _ := filepath.Glob(dp.pattern)
 		for _, match := range matches {
 			fileQueue <- match
 		}
