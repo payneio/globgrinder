@@ -18,7 +18,7 @@ The `processing` directories will be created as needed.
 pattern := "../some_dir/*.txt"
 outDir := "./processed"
 
-gw, err := globwalker.New(pattern, outDir)
+gg, err := globgrinder.New(pattern, outDir)
 if err != nil {
   log.Panic(err)
 }
@@ -26,7 +26,7 @@ if err != nil {
 process := make(chan string)
 done := make(chan bool)
 
-go gw.Run(process, done)
+go gg.Run(process, done)
 
 for path := range process {
 
