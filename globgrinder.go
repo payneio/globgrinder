@@ -5,15 +5,15 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
 
 type GlobGrinder struct {
-	glob          string
-	processedDir  string
-	processingDir string
-	keep          bool
+	glob         string
+	processedDir string
+	keep         bool
 }
 
 func New(glob string, out string) (*GlobGrinder, error) {
@@ -62,8 +62,6 @@ func (gg *GlobGrinder) Run(process chan<- string, done <-chan bool) error {
 			continue
 		}
 
-		fileBasePath := filepath.Base(path)
-
 		// get lock on file by renaming file (if it has already been renamed, skip it)
 		if err := os.Rename(path, grindingPath(path)); err != nil {
 			log.Printf("Somebody else got the file first. %v\n", err)
@@ -77,16 +75,13 @@ func (gg *GlobGrinder) Run(process chan<- string, done <-chan bool) error {
 
 		if gg.keep {
 
-			// Move the file to the outputDir
+			// Move the file to the processedDir
 			// We panic if we're not able to move the file because we want to not
 			// keep processing files if the setup is messed up. E.g. the permissions
 			// are wrong or have changed.
-			processedPath := filepath.Join(gg.processedDir, fileBasePath)
-			if exists, _ := exists(processedPath); exists == true {
-				if err := os.Remove(processedPath); err != nil {
-					log.Fatalf("Couldn't move a processed file out of the way. %v\n", err)
-				}
-			}
+			processedPath := filepath.Join(gg.processedDir, filepath.Base(path))
+			processedPath = uniqueIncrementedPath(processedPath)
+
 			if err := os.Rename(grindingPath(path), processedPath); err != nil {
 				log.Fatalf("Processed the file, but couldn't copy to processed directory. %v\n", err)
 			}
@@ -102,6 +97,32 @@ func (gg *GlobGrinder) Run(process chan<- string, done <-chan bool) error {
 
 	}
 	return nil
+}
+
+// Figure out the path to rename a file into. If it already exists in the processDir, give
+// it a numbered extention
+func uniqueIncrementedPath(path string) string {
+
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return path
+	}
+
+	// if the file already exists, give it an incrementing number extension
+
+	ms := path + ".[0-9]*"
+	matches, _ := filepath.Glob(ms)
+	if len(matches) == 0 {
+		return path + ".1"
+	}
+
+	n := 0
+	for _, match := range matches {
+		ext := strings.Trim(filepath.Ext(match), ".()")
+		if i, err := strconv.Atoi(ext); err == nil && i > n {
+			n = i
+		}
+	}
+	return path + "." + strconv.Itoa(n+1)
 }
 
 func (gg *GlobGrinder) fileWatcher(fileQueue chan string) {

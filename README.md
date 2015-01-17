@@ -32,8 +32,19 @@ for path := range process {
 
   // Do something with the file
 
+  // The files are being processed, so they'll have the suffix *.grinder
+  // If you just want the filename, you can use the .Path(path string) convenience function.
+
+  log.Printf("Processing file: %v\n", gg.Path(path))
+
   done <- true
 }
 
 ```
+
+Notes
+-----
+
+* Be careful to not have files in your chosen processed directory match your glob pattern. It will cause a recursion you really don't want.
+* If you specify your processed directory as an empty string "", your files will just be deleted after processing.
 
