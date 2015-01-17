@@ -1,20 +1,24 @@
-dirprocessor
-============
+globgrinder
+===========
 
-This library will watch (poll every 10 seconds) for the presence of a file matching a given glob pattern.
+This library will watch (poll every 10 seconds) for files matching a given glob pattern, give you 
+a chance to do something with it, then move the file to a "processed" directory.
 
-Once a file is found, it will be atomically moved to a `processing` directory in a working directory you specify and notify you using a passed in channel.
-You can then pull the file path off the channel, do what you need with it, then signal you are done using another 
-passed in channel. The dirprocessor will then move the file to a `processed` directory within your working directory.
+Once a file is found, it's path will be thrown on a supplied channel for you to synchronously process however you'd like.
+When you are done doing your thing, put a bool on the done channel to signal globgrinder to give you the next file.
 
-The `processing` and `processed` directories will be created as needed in your working directory.
+The file processing, though, is asynchronous; meaning, you can run multiple globgrinders at once, even if their 
+globs overlap. Only one globgrinder will process a file. This is accomplished by atomically moving the file
+to a `processing` directory created within your output directory.
+
+The `processing` directories will be created as needed.
 
 ```go
 
-workingDirectory := "."
 pattern := "../some_dir/*.txt"
+outDir := "./processed"
 
-dp, err := dirprocessor.New(workingDirectory, pattern)
+gw, err := globwalker.New(pattern, outDir)
 if err != nil {
   log.Panic(err)
 }
@@ -22,7 +26,7 @@ if err != nil {
 process := make(chan string)
 done := make(chan bool)
 
-go dp.Run(process, done)
+go gw.Run(process, done)
 
 for path := range process {
 

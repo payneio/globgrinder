@@ -1,7 +1,6 @@
-package dirprocessor
+package globgrinder
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -9,42 +8,38 @@ import (
 	"time"
 )
 
-type DirProcessor struct {
-	workingDir    string
-	processingDir string
+type GlobGrinder struct {
+	glob          string
 	processedDir  string
-	pattern       string
+	processingDir string
 }
 
-func New(watchDir string, pattern string) (*DirProcessor, error) {
+func New(glob string, out string) (*GlobGrinder, error) {
 
-	dp := new(DirProcessor)
-	if _, err := filepath.Glob(pattern); err != nil {
+	gg := new(GlobGrinder)
+	if _, err := filepath.Glob(glob); err != nil {
 		return nil, fmt.Errorf("The file pattern you give must be a valid glob. %v", err)
 	}
-	dp.pattern = pattern
+	gg.glob = glob
 
-	if exists, err := exists(watchDir); exists == false || err != nil {
-		return nil, errors.New("The directory you specified to watch does not exist (or is not readable).")
-	}
-	dp.workingDir = watchDir
-	dp.processingDir = filepath.Join(dp.workingDir, "processing")
-	dp.processedDir = filepath.Join(dp.workingDir, "processed")
+	gg.processedDir = out
+	gg.processingDir = filepath.Join(gg.processedDir, "processing")
 
-	// Check if watch dir exists. Check if subfolder processing and processed exist.
-	if err := os.MkdirAll(dp.processingDir, 0733); err != nil {
+	// Create directories as required.
+	if err := os.MkdirAll(gg.processingDir, 0733); err != nil {
 		return nil, err
 	}
-	if err := os.MkdirAll(dp.processedDir, 0733); err != nil {
+	if err := os.MkdirAll(gg.processedDir, 0733); err != nil {
 		return nil, err
 	}
-	return dp, nil
+
+	return gg, nil
 }
 
-func (dp *DirProcessor) Run(process chan<- string, done <-chan bool) error {
+func (gg *GlobGrinder) Run(process chan<- string, done <-chan bool) error {
 
 	fileQueue := make(chan string)
-	go dp.fileWatcher(fileQueue)
+	go gg.fileWatcher(fileQueue)
 
 	// Process files as they come in
 	for path := range fileQueue {
@@ -52,7 +47,7 @@ func (dp *DirProcessor) Run(process chan<- string, done <-chan bool) error {
 		fileBasePath := filepath.Base(path)
 
 		// get lock on file by copying file (if it has already been moved, continue gracefully)
-		processingPath := filepath.Join(dp.processingDir, fileBasePath)
+		processingPath := filepath.Join(gg.processingDir, fileBasePath)
 		if err := os.Rename(path, processingPath); err != nil {
 			log.Printf("Somebody else got the file first. %v\n", err)
 			continue
@@ -67,7 +62,7 @@ func (dp *DirProcessor) Run(process chan<- string, done <-chan bool) error {
 		// We panic if we're not able to move the file because we want to not
 		// keep processing files if the setup is messed up. E.g. the permissions
 		// are wrong or have changed.
-		processedPath := filepath.Join(dp.processedDir, fileBasePath)
+		processedPath := filepath.Join(gg.processedDir, fileBasePath)
 		if exists, _ := exists(processedPath); exists == true {
 			if err := os.Remove(processedPath); err != nil {
 				log.Fatalf("Couldn't move a processed file out of the way. %v\n", err)
@@ -81,10 +76,10 @@ func (dp *DirProcessor) Run(process chan<- string, done <-chan bool) error {
 	return nil
 }
 
-func (dp *DirProcessor) fileWatcher(fileQueue chan string) {
+func (gg *GlobGrinder) fileWatcher(fileQueue chan string) {
 
 	for {
-		matches, _ := filepath.Glob(dp.pattern)
+		matches, _ := filepath.Glob(gg.glob)
 		for _, match := range matches {
 			fileQueue <- match
 		}
