@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -12,6 +13,7 @@ type GlobGrinder struct {
 	glob          string
 	processedDir  string
 	processingDir string
+	keep          bool
 }
 
 func New(glob string, out string) (*GlobGrinder, error) {
@@ -23,17 +25,28 @@ func New(glob string, out string) (*GlobGrinder, error) {
 	gg.glob = glob
 
 	gg.processedDir = out
-	gg.processingDir = filepath.Join(gg.processedDir, "processing")
-
-	// Create directories as required.
-	if err := os.MkdirAll(gg.processingDir, 0733); err != nil {
-		return nil, err
+	if out == "" {
+		gg.keep = false
+	} else {
+		gg.keep = true
 	}
-	if err := os.MkdirAll(gg.processedDir, 0733); err != nil {
-		return nil, err
+
+	// Create output directory if needed
+	if gg.keep {
+		if err := os.MkdirAll(gg.processedDir, 0733); err != nil {
+			return nil, err
+		}
 	}
 
 	return gg, nil
+}
+
+func grindingPath(path string) string {
+	return (path + ".grinding")
+}
+
+func Path(path string) string {
+	return strings.TrimSuffix(path, ".grinding")
 }
 
 func (gg *GlobGrinder) Run(process chan<- string, done <-chan bool) error {
@@ -44,32 +57,47 @@ func (gg *GlobGrinder) Run(process chan<- string, done <-chan bool) error {
 	// Process files as they come in
 	for path := range fileQueue {
 
+		// never process a file already being ground
+		if filepath.Ext(path) == "grinding" {
+			continue
+		}
+
 		fileBasePath := filepath.Base(path)
 
-		// get lock on file by copying file (if it has already been moved, continue gracefully)
-		processingPath := filepath.Join(gg.processingDir, fileBasePath)
-		if err := os.Rename(path, processingPath); err != nil {
+		// get lock on file by renaming file (if it has already been renamed, skip it)
+		if err := os.Rename(path, grindingPath(path)); err != nil {
 			log.Printf("Somebody else got the file first. %v\n", err)
 			continue
 		}
 
 		// Put file in queue to be processed.
 		log.Print("Adding file to processing queue.")
-		process <- processingPath
+		process <- grindingPath(path)
 		<-done // wait for processing.
 
-		// Move file from processing to processed
-		// We panic if we're not able to move the file because we want to not
-		// keep processing files if the setup is messed up. E.g. the permissions
-		// are wrong or have changed.
-		processedPath := filepath.Join(gg.processedDir, fileBasePath)
-		if exists, _ := exists(processedPath); exists == true {
-			if err := os.Remove(processedPath); err != nil {
-				log.Fatalf("Couldn't move a processed file out of the way. %v\n", err)
+		if gg.keep {
+
+			// Move the file to the outputDir
+			// We panic if we're not able to move the file because we want to not
+			// keep processing files if the setup is messed up. E.g. the permissions
+			// are wrong or have changed.
+			processedPath := filepath.Join(gg.processedDir, fileBasePath)
+			if exists, _ := exists(processedPath); exists == true {
+				if err := os.Remove(processedPath); err != nil {
+					log.Fatalf("Couldn't move a processed file out of the way. %v\n", err)
+				}
 			}
-		}
-		if err := os.Rename(processingPath, processedPath); err != nil {
-			log.Fatalf("Processed the file, but couldn't copy to processed directory. %v\n", err)
+			if err := os.Rename(grindingPath(path), processedPath); err != nil {
+				log.Fatalf("Processed the file, but couldn't copy to processed directory. %v\n", err)
+			}
+
+		} else {
+
+			// if we don't need to keep it, let's just delete it
+			if err := os.Remove(grindingPath(path)); err != nil {
+				log.Fatalf("Could not remove a file after it was processed. It still has the .grinding extension.")
+			}
+
 		}
 
 	}
