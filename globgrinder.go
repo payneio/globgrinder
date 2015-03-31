@@ -20,7 +20,7 @@ func New(glob string, out string) (*GlobGrinder, error) {
 
 	gg := new(GlobGrinder)
 	if _, err := filepath.Glob(glob); err != nil {
-		return nil, fmt.Errorf("The file pattern you give must be a valid glob. %v", err)
+		return nil, fmt.Errorf("The file pattern you give must be a valid glob (ref: http://golang.org/pkg/path/filepath/#Match):  %v", err)
 	}
 	gg.glob = glob
 
@@ -42,7 +42,7 @@ func New(glob string, out string) (*GlobGrinder, error) {
 }
 
 func grindingPath(path string) string {
-	return (path + ".grinding")
+	return path + ".grinding"
 }
 
 func Path(path string) string {
